@@ -35,13 +35,21 @@ jobs:
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/spring-boot-ci-demo:latest
 
       - name: SSH and Deploy to EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/deploy_key.pem
+          chmod 600 ~/.ssh/deploy_key.pem
+
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/deploy_key.pem -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" << EOF
             docker stop spring-demo || true
             docker rm spring-demo || true
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/spring-boot-ci-demo:latest
-            docker run -d --name spring-demo -p 8080:8080 ${{ secrets.DOCKERHUB_USERNAME }}/spring-boot-ci-demo:latest
+            docker pull ${DOCKERHUB_USERNAME}/spring-boot-ci-demo:latest
+            docker run -d --name spring-demo -p 8080:8080 ${DOCKERHUB_USERNAME}/spring-boot-ci-demo:latest
+          EOF
